@@ -4,6 +4,7 @@ import os, asyncio, traceback
 from dotenv import load_dotenv
 from aiohttp import web
 from utils.database import init_db, get_prefix
+from utils.embeds import perm_error_embed, error_embed
 
 load_dotenv()
 
@@ -13,7 +14,7 @@ async def prefix_callable(bot, message):
     return await get_prefix(message.guild.id)
 
 async def handle(request):
-    return web.Response(text="🦋 XENO Online")
+    return web.Response(text="🦋 Dhadkhan Online - Security Active")
 
 async def start_webserver():
     app = web.Application()
@@ -24,29 +25,40 @@ async def start_webserver():
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    print(f"✅ Webserver {port}")
+    print(f"✅ Webserver running on {port}")
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=prefix_callable, intents=intents, help_command=None)
 
 @bot.event
 async def on_ready():
-    print(f"🦋 {bot.user} | Guilds: {len(bot.guilds)}")
+    print(f"🦋 {bot.user} | Guilds: {len(bot.guilds)} | Users: {len(bot.users)}")
     await init_db()
-    await bot.tree.sync()
-    print("✅ SLASH + DB DONE - All commands loaded")
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} slash commands")
+    except Exception as e:
+        print(f"Slash sync failed: {e}")
+    print("✅ DB + SLASH DONE")
+
+    # Status loop
+    while True:
+        try:
+            await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers | ?help"))
+            await asyncio.sleep(60)
+            await bot.change_presence(activity=discord.Game(name="Dhadkhan Security • ?antinuke"))
+            await asyncio.sleep(60)
+        except: break
 
 async def load_cogs():
     count = 0
-    # SIRF cogs folder ko scan karega
     for root, dirs, files in os.walk("./cogs"):
         for f in files:
             if f.endswith(".py") and f != "__init__.py":
-                # ./cogs/fun/rps.py -> cogs.fun.rps
                 cog = os.path.join(root, f)[2:-3].replace(os.sep, ".").replace("/", ".")
                 try:
                     await bot.load_extension(cog)
-                    print(f"✅ Loaded Category: {cog}")
+                    print(f"✅ Loaded: {cog}")
                     count += 1
                 except Exception as e:
                     print(f"❌ FAIL {cog}: {e}")
@@ -57,5 +69,39 @@ async def load_cogs():
 async def setup_hook():
     asyncio.create_task(start_webserver())
     await load_cogs()
+
+# ===== ERROR HANDLER - FINAL =====
+@bot.event
+async def on_command_error(ctx, error):
+    # Ignore if command not found
+    if isinstance(error, commands.CommandNotFound):
+        return
+    
+    # Permission fail = Aesthetic embed
+    if isinstance(error, commands.CheckFailure):
+        try:
+            await ctx.send(embed=perm_error_embed(), delete_after=7)
+        except: pass
+        return
+    
+    if isinstance(error, commands.MissingPermissions):
+        try:
+            await ctx.send(embed=perm_error_embed(), delete_after=7)
+        except: pass
+        return
+
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(embed=error_embed(f"Missing argument: `{error.param.name}`\nUse `?help {ctx.command}`"), delete_after=8)
+        return
+
+    # Other errors log
+    print(f"Error in {ctx.command}: {error}")
+    traceback.print_exception(type(error), error, error.__traceback__)
+
+@bot.event
+async def on_message(message):
+    if message.author.bot: 
+        return
+    await bot.process_commands(message)
 
 bot.run(os.getenv("BOT_TOKEN"))
