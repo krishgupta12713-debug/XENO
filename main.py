@@ -30,25 +30,28 @@ async def start_webserver():
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix=prefix_callable, intents=intents, help_command=None)
 
-@bot.event
-async def on_ready():
-    print(f"🦋 {bot.user} | Guilds: {len(bot.guilds)} | Users: {len(bot.users)}")
-    await init_db()
-    try:
-        synced = await bot.tree.sync()
-        print(f"✅ Synced {len(synced)} slash commands")
-    except Exception as e:
-        print(f"Slash sync failed: {e}")
-    print("✅ DB + SLASH DONE")
-
-    # Status loop
-    while True:
+# ===== STATUS TASK =====
+async def status_task():
+    await bot.wait_until_ready()
+    while not bot.is_closed():
         try:
             await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers | ?help"))
             await asyncio.sleep(60)
             await bot.change_presence(activity=discord.Game(name="Dhadkhan Security • ?antinuke"))
             await asyncio.sleep(60)
-        except: break
+        except:
+            await asyncio.sleep(10)
+
+@bot.event
+async def on_ready():
+    print(f"🦋 {bot.user} | Guilds: {len(bot.guilds)}")
+    await init_db()
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} slash commands")
+    except Exception as e:
+        print(f"Slash sync fail: {e}")
+    print("✅ DB + SLASH DONE")
 
 async def load_cogs():
     count = 0
@@ -69,39 +72,27 @@ async def load_cogs():
 async def setup_hook():
     asyncio.create_task(start_webserver())
     await load_cogs()
+    bot.loop.create_task(status_task())
 
-# ===== ERROR HANDLER - FINAL =====
+# ===== ERROR HANDLER =====
 @bot.event
 async def on_command_error(ctx, error):
-    # Ignore if command not found
     if isinstance(error, commands.CommandNotFound):
         return
-    
-    # Permission fail = Aesthetic embed
-    if isinstance(error, commands.CheckFailure):
+    if isinstance(error, (commands.CheckFailure, commands.MissingPermissions)):
         try:
-            await ctx.send(embed=perm_error_embed(), delete_after=7)
+            await ctx.send(embed=perm_error_embed(), delete_after=6)
         except: pass
         return
-    
-    if isinstance(error, commands.MissingPermissions):
-        try:
-            await ctx.send(embed=perm_error_embed(), delete_after=7)
-        except: pass
-        return
-
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(embed=error_embed(f"Missing argument: `{error.param.name}`\nUse `?help {ctx.command}`"), delete_after=8)
+        await ctx.send(embed=error_embed(f"Missing: `{error.param.name}`\nUse `?help {ctx.command}`"), delete_after=8)
         return
-
-    # Other errors log
     print(f"Error in {ctx.command}: {error}")
     traceback.print_exception(type(error), error, error.__traceback__)
 
 @bot.event
 async def on_message(message):
-    if message.author.bot: 
-        return
+    if message.author.bot: return
     await bot.process_commands(message)
 
 bot.run(os.getenv("BOT_TOKEN"))
