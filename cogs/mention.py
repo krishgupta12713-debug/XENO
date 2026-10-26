@@ -3,16 +3,27 @@ from discord.ext import commands
 from utils.embeds import base_embed
 import os
 
-SUPPORT_URL = os.getenv("SUPPORT_SERVER", "https://discord.gg/xeno") # .env me SUPPORT_SERVER link daal de
+SUPPORT_URL = os.getenv("SUPPORT_SERVER", "https://discord.gg/xeno")
 PREFIX = os.getenv("PREFIX", "?")
 
 class FeatureView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, bot):
         super().__init__(timeout=120)
+        self.bot = bot
+        
+        # Invite Link Auto Banega Bot ID se
+        invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}&permissions=8&scope=bot%20applications.commands"
+        
+        # Invite Button - FIXED TARIKA
+        self.add_item(discord.ui.Button(
+            label="Invite",
+            style=discord.ButtonStyle.link,
+            url=invite_url,
+            emoji="🔗"
+        ))
 
     @discord.ui.button(label="Features", style=discord.ButtonStyle.secondary)
     async def features_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Yaha tere saare features dikhenge - isko apne hisab se edit kar sakta hai
         embed = discord.Embed(
             title="XENO - All Features",
             color=0x2B2D31
@@ -24,10 +35,6 @@ class FeatureView(discord.ui.View):
         embed.set_footer(text="Powered by XENO Development")
         await interaction.response.edit_message(embed=embed, view=self)
 
-    @discord.ui.button(label="Support Server", style=discord.ButtonStyle.secondary, url=SUPPORT_URL)
-    async def support_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        pass # Link button ko callback nahi chahiye
-
 class Mention(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -37,22 +44,10 @@ class Mention(commands.Cog):
         if message.author.bot or not message.guild:
             return
         
-        # Check if bot is mentioned
         if self.bot.user in message.mentions:
-            # Agar message sirf mention hai (ya mention ke saath kuch bhi)
-            # Aur command nahi hai
-            if message.content.strip() in [f"<@{self.bot.user.id}>", f"<@!{self.bot.user.id}>"]:
-                pass # allow
-            elif not message.content.strip().startswith(f"<@{self.bot.user.id}>") and not message.content.strip().startswith(f"<@!{self.bot.user.id}>"):
-                # Agar beech me mention hai to bhi dikhana hai? Zynrax beech me bhi dikhata hai
-                # Agar tu chahe sirf start pe ho to upar wala condition use kar
-                pass
-
-            # Avoid replying to every message where bot is mentioned with other text + command
-            # Sirf jab prefix nahi hai tab reply karo
             ctx = await self.bot.get_context(message)
             if ctx.valid:
-                return # Ye command hai, ignore
+                return
 
             embed = discord.Embed(
                 title=f"Hey, I'm {self.bot.user.name}",
@@ -62,10 +57,7 @@ class Mention(commands.Cog):
             embed.set_thumbnail(url=self.bot.user.display_avatar.url)
             embed.set_footer(text="Powered by XENO Development")
 
-            view = FeatureView()
-            # Support link ko dynamic update
-            view.children[1].url = SUPPORT_URL
-
+            view = FeatureView(self.bot)
             await message.reply(embed=embed, view=view, mention_author=False)
 
 async def setup(bot):
