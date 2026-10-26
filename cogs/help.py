@@ -5,137 +5,61 @@ import os
 
 SUPPORT_URL = os.getenv("SUPPORT_SERVER", "https://discord.gg/xeno")
 
-# Saare commands ka data - Yahi Features button me bhi dikhega
-COMMANDS_DATA = {
-    "Security & Protection": {
-        "emoji": "🛡️",
-        "desc": "Advanced server security",
-        "commands": [
-            "`antinuke` - Enable/disable antinuke system",
-            "`whitelist` - Manage whitelisted users",
-            "`panel` - Security control panel"
-        ]
-    },
-    "Moderation": {
-        "emoji": "🔨",
-        "desc": "Powerful mod tools",
-        "commands": [
-            "`ban`, `unban`, `kick`, `mute`, `unmute`",
-            "`warn`, `clearwarn`, `purge`, `nuke`",
-            "`lock`, `unlock`, `slowmode`, `role`"
-        ]
-    },
-    "Automod": {
-        "emoji": "🤖",
-        "desc": "Automated moderation",
-        "commands": [
-            "`automod` - Setup automod",
-            "`anti-invite`, `anti-link`, `anti-spam`",
-            "`anti-massmention`"
-        ]
-    },
-    "Utility": {
-        "emoji": "🛠️",
-        "desc": "Essential utilities",
-        "commands": [
-            "`prefix` - Change server prefix",
-            "`afk`, `avatar`, `userinfo`, `serverinfo`",
-            "`ping`, `uptime`, `invite`"
-        ]
-    },
-    "Welcomer": {
-        "emoji": "👋",
-        "desc": "Welcome & Goodbye messages",
-        "commands": [
-            "`welcome` - Setup welcome system",
-            "`goodbye` - Setup goodbye",
-            "`booster` - Booster messages",
-            "`autorole` - Auto role on join"
-        ]
-    },
-    "Logging": {
-        "emoji": "📜",
-        "desc": "Server activity logs",
-        "commands": [
-            "`logging` - Setup all logs",
-            "`setlog` - Set log channel"
-        ]
-    },
-    "Fun & Giveaway": {
-        "emoji": "🎉",
-        "desc": "Games & entertainment",
-        "commands": [
-            "`giveaway` - Host giveaways",
-            "`autorespond` - Custom auto replies",
-            "`8ball`, `meme`, `joke`"
-        ]
-    }
-}
-
 class HelpSelect(discord.ui.Select):
     def __init__(self, current_prefix):
         self.current_prefix = current_prefix
-        options = []
-        for category, data in COMMANDS_DATA.items():
-            options.append(discord.SelectOption(
-                label=category,
-                description=data["desc"],
-                emoji=data["emoji"]
-            ))
-        
-        super().__init__(placeholder="Select a category...", options=options, min_values=1, max_values=1)
+        options = [
+            discord.SelectOption(label="Moderation", description=f"Use {current_prefix}ban, {current_prefix}kick", emoji="🔨"),
+            discord.SelectOption(label="Security", description="Antinuke & protection", emoji="🛡️"),
+            discord.SelectOption(label="Utility", description=f"Prefix, info commands", emoji="🛠️"),
+            discord.SelectOption(label="Welcomer", description="Welcome system", emoji="👋"),
+            discord.SelectOption(label="Logging", description="Server logs", emoji="📜"),
+        ]
+        super().__init__(placeholder=f"Current Prefix: {current_prefix} | Select category...", options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        category = self.values[0]
-        data = COMMANDS_DATA[category]
-        
         embed = discord.Embed(
-            title=f"{data['emoji']} {category}",
-            description=f"**Prefix:** `{self.current_prefix}` | Use `{self.current_prefix}help <command>` for details\n\n" + "\n".join(data["commands"]),
+            title=f"{self.values[0]} Commands",
+            description=f"Use `{self.current_prefix}help <command>` for more info\nCurrent prefix: `{self.current_prefix}`",
             color=0x2B2D31
         )
-        embed.set_footer(text=f"Requested by {interaction.user} | Powered by XENO Development", icon_url=interaction.user.display_avatar.url)
+        # Yaha apne commands add kar de category wise
+        if self.values[0] == "Moderation":
+            embed.add_field(name="Commands", value=f"```{self.current_prefix}ban, {self.current_prefix}kick, {self.current_prefix}mute, {self.current_prefix}purge```", inline=False)
+        elif self.values[0] == "Utility":
+            embed.add_field(name="Commands", value=f"```{self.current_prefix}prefix, {self.current_prefix}setprefix, {self.current_prefix}ping, {self.current_prefix}userinfo```", inline=False)
         
         await interaction.response.edit_message(embed=embed)
 
 class HelpView(discord.ui.View):
     def __init__(self, bot, current_prefix):
         super().__init__(timeout=120)
-        self.bot = bot
-        self.current_prefix = current_prefix
         self.add_item(HelpSelect(current_prefix))
-        
         invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}&permissions=8&scope=bot%20applications.commands"
-        self.add_item(discord.ui.Button(label="Invite", style=discord.ButtonStyle.link, url=invite_url, emoji="🔗"))
-        self.add_item(discord.ui.Button(label="Support Server", style=discord.ButtonStyle.link, url=SUPPORT_URL, emoji="💬"))
+        self.add_item(discord.ui.Button(label="Invite", style=discord.ButtonStyle.link, url=invite_url))
 
 class Help(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.hybrid_command(name="help", description="Show all bot commands")
-    async def help_command(self, ctx: commands.Context):
-        # Live prefix lao
-        try:
-            live_prefix = await get_prefix(ctx.guild.id) if ctx.guild else "?"
-        except:
-            live_prefix = "?"
-
-        # Main Help Embed - Zynrax Style
+    @commands.hybrid_command(name="help", description="Show all commands")
+    async def help_command(self, ctx):
+        # LIVE PREFIX - Yahi main fix hai
+        live_prefix = await get_prefix(ctx.guild.id) if ctx.guild else "?"
+        
         embed = discord.Embed(
             title=f"{self.bot.user.name} Help Panel",
             description=(
                 f"**Server Prefix:** `{live_prefix}`\n"
-                f"**Total Commands:** `{len(COMMANDS_DATA)} categories`\n"
-                f"**Get Started:** Select a category below\n\n"
-                "**__Security & Protection__**\nAntinuke - Advanced server protection\nModeration - Powerful mod tools\nAutomod - Automated moderation\n\n"
-                "**__Server Management__**\nUtility - Essential utilities\nLogging - Server activity logs\nAutoResponder - Custom responses\n\n"
-                "**__Community__**\nWelcomer - Welcome messages\nFun - Games & entertainment\nGiveaway - Host giveaways\n"
+                f"**Use:** `{live_prefix}help` or `/help`\n\n"
+                f"**Moderation**\n`{live_prefix}ban` `{live_prefix}kick` `{live_prefix}mute`\n\n"
+                f"**Prefix**\n`{live_prefix}setprefix` `{live_prefix}prefix`\n\n"
+                f"**Utility**\n`{live_prefix}ping` `{live_prefix}userinfo`\n"
             ),
             color=0x2B2D31
         )
         embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-        embed.set_footer(text="Powered by XENO Development")
+        embed.set_footer(text=f"Current Prefix: {live_prefix} | Powered by XENO")
         
         view = HelpView(self.bot, live_prefix)
         await ctx.send(embed=embed, view=view)
