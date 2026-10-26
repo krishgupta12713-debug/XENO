@@ -1,45 +1,99 @@
 import discord
 from discord.ext import commands
-import os
+import os, asyncio, traceback
+from dotenv import load_dotenv
+from aiohttp import web
+from utils.database import init_db, get_prefix
+from utils.embeds import perm_error_embed, error_embed
 
-SUPPORT_URL = os.getenv("SUPPORT_SERVER", "https://discord.gg/xeno")
-PREFIX = os.getenv("PREFIX", "?")
+load_dotenv()
 
-class FeatureView(discord.ui.View):
-    def __init__(self, bot):
-        super().__init__(timeout=120)
-        self.bot = bot
-        invite_url = f"https://discord.com/api/oauth2/authorize?client_id={bot.user.id}&permissions=8&scope=bot%20applications.commands"
-        # FIXED: Link button aise banta hai
-        self.add_item(discord.ui.Button(label="Invite", style=discord.ButtonStyle.link, url=invite_url, emoji="🔗"))
+async def prefix_callable(bot, message):
+    if not message.guild:
+        return os.getenv("DEFAULT_PREFIX", "?")
+    try:
+        return await get_prefix(message.guild.id)
+    except:
+        return os.getenv("DEFAULT_PREFIX", "?")
 
-    @discord.ui.button(label="Features", style=discord.ButtonStyle.secondary)
-    async def features_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(title="XENO - All Features", color=0x2B2D31)
-        embed.add_field(name="**Security & Protection**", value="```\nAntinuke - Advanced server protection\nModeration - Powerful mod tools\nAutomod - Automated moderation\n```", inline=False)
-        embed.add_field(name="**Server Management**", value="```\nUtility - Essential utilities\nLogging - Server activity logs\nAutoResponder - Custom responses\nGiveaway - Host giveaways\n```", inline=False)
-        embed.add_field(name="**Engagement & Fun**", value="```\nFun - Games & entertainment\nMusic - Music player\nWelcomer - Welcome messages\n```", inline=False)
-        embed.add_field(name="**Community Features**", value="```\nTickets - Support system\nReaction Roles - Role management\nVoiceMaster - Temp Voice channels\nLeveling - Chat levels\n```", inline=False)
-        embed.set_footer(text="Powered by XENO Development")
-        await interaction.response.edit_message(embed=embed, view=self)
+async def handle(request):
+    return web.Response(text="🦋 Dhadkhan Online - Security Active")
 
-class Mention(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
+async def start_webserver():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    app.router.add_get("/health", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"✅ Webserver running on {port}")
 
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        if message.author.bot or not message.guild:
-            return
-        if self.bot.user in message.mentions:
-            ctx = await self.bot.get_context(message)
-            if ctx.valid:
-                return
-            embed = discord.Embed(title=f"Hey, I'm {self.bot.user.name}", description=f"**Server Prefix:** `{PREFIX}`\n**Get Started:** Run `{PREFIX}help` to discover all features\n**Support:** Having issues ? Join our [Support Server]({SUPPORT_URL})", color=0x2B2D31)
-            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-            embed.set_footer(text="Powered by XENO Development")
-            view = FeatureView(self.bot)
-            await message.reply(embed=embed, view=view, mention_author=False)
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix=prefix_callable, intents=intents, help_command=None)
 
-async def setup(bot):
-    await bot.add_cog(Mention(bot))
+async def status_task():
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        try:
+            await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{len(bot.guilds)} servers | ?help"))
+            await asyncio.sleep(60)
+            await bot.change_presence(activity=discord.Game(name="Dhadkhan Security • ?antinuke"))
+            await asyncio.sleep(60)
+        except:
+            await asyncio.sleep(10)
+
+@bot.event
+async def on_ready():
+    print(f"🦋 {bot.user} | Guilds: {len(bot.guilds)}")
+    await init_db()
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Synced {len(synced)} slash commands")
+    except Exception as e:
+        print(f"Slash sync fail: {e}")
+    print("✅ DB + SLASH DONE")
+
+async def load_cogs():
+    count = 0
+    for root, dirs, files in os.walk("./cogs"):
+        for f in files:
+            if f.endswith(".py") and f != "__init__.py":
+                cog = os.path.join(root, f)[2:-3].replace(os.sep, ".").replace("/", ".")
+                try:
+                    await bot.load_extension(cog)
+                    print(f"✅ Loaded: {cog}")
+                    count += 1
+                except Exception as e:
+                    print(f"❌ FAIL {cog}: {e}")
+                    traceback.print_exc()
+    print(f"--- Total {count} cogs loaded ---")
+
+@bot.event
+async def setup_hook():
+    asyncio.create_task(start_webserver())
+    await load_cogs()
+    bot.loop.create_task(status_task())
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return
+    if isinstance(error, (commands.CheckFailure, commands.MissingPermissions)):
+        try:
+            await ctx.send(embed=perm_error_embed(), delete_after=6)
+        except: pass
+        return
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(embed=error_embed(f"Missing: `{error.param.name}`\nUse `?help {ctx.command}`"), delete_after=8)
+        return
+    print(f"Error in {ctx.command}: {error}")
+    traceback.print_exception(type(error), error, error.__traceback__)
+
+@bot.event
+async def on_message(message):
+    if message.author.bot: return
+    await bot.process_commands(message)
+
+bot.run(os.getenv("BOT_TOKEN"))
