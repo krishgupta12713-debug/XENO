@@ -17,10 +17,7 @@ class FeatureView(discord.ui.View):
     async def features_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         embed = discord.Embed(title="XENO - All Features", color=0x2B2D31)
         embed.description = f"Current Prefix: `{self.current_prefix}` | Use `{self.current_prefix}help <command>`"
-        embed.add_field(name="**Security & Protection**", value=f"```\n{self.current_prefix}antinuke - Advanced server protection\n{self.current_prefix}moderation - Powerful mod tools\n{self.current_prefix}automod - Automated moderation\n```", inline=False)
-        embed.add_field(name="**Server Management**", value=f"```\n{self.current_prefix}utility - Essential utilities\n{self.current_prefix}logging - Server activity logs\n{self.current_prefix}autorespond - Custom responses\n{self.current_prefix}giveaway - Host giveaways\n```", inline=False)
-        embed.add_field(name="**Engagement & Fun**", value=f"```\n{self.current_prefix}fun - Games & entertainment\n{self.current_prefix}welcomer - Welcome messages\n```", inline=False)
-        embed.add_field(name="**Community Features**", value=f"```\n{self.current_prefix}tickets - Support system\n{self.current_prefix}reactionroles - Role management\n```", inline=False)
+        embed.add_field(name="**Security**", value=f"```\n{self.current_prefix}antinuke\n{self.current_prefix}moderation\n```", inline=False)
         embed.set_footer(text="Powered by XENO Development")
         await interaction.response.edit_message(embed=embed, view=self)
 
@@ -40,49 +37,56 @@ class Mention(commands.Cog):
     async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:
             return
-        if self.bot.user in message.mentions:
-            ctx = await self.bot.get_context(message)
-            if ctx.valid:
-                return
-            try:
-                live_prefix = await get_prefix(message.guild.id)
-            except:
-                live_prefix = os.getenv("DEFAULT_PREFIX", "?")
 
-            embed = discord.Embed(
-                title=f"Hey, I'm {self.bot.user.name}", 
-                description=f"**Server Prefix:** `{live_prefix}`\n**Get Started:** Run `{live_prefix}help` to discover all features\n**Support:** Having issues ? Join our [Support Server]({SUPPORT_URL})", 
-                color=0x2B2D31
-            )
-            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-            embed.set_footer(text="Powered by XENO Development")
-            view = FeatureView(self.bot, live_prefix)
-            await message.reply(embed=embed, view=view, mention_author=False)
+        # ==== NAYA FIX: Sirf prefix akela hai toh ignore ====
+        try:
+            live_prefix = await get_prefix(message.guild.id)
+        except:
+            live_prefix = os.getenv("DEFAULT_PREFIX", "?")
 
-    # YAHI ADD KIYA - HELP COMMAND BHI ISI ME
+        # Agar message sirf "?" ya "!" ya prefix akela hai toh kuch mat karo
+        if message.content.strip() == live_prefix:
+            return
+        
+        if message.content.strip() == f"<@{self.bot.user.id}>" or message.content.strip() == f"<@!{self.bot.user.id}>":
+            pass # Isko aane do - ye proper mention hai
+        elif message.reference and not message.mentions:
+            return # Drag/reply ignore
+
+        # Proper mention check
+        bot_mention_1 = f"<@{self.bot.user.id}>"
+        bot_mention_2 = f"<@!{self.bot.user.id}>"
+        if bot_mention_1 not in message.content and bot_mention_2 not in message.content and self.bot.user not in message.mentions:
+            return
+
+        # Agar valid command hai (?help) toh mention embed mat bhejo
+        ctx = await self.bot.get_context(message)
+        if ctx.valid:
+            return
+
+        embed = discord.Embed(
+            title=f"Hey, I'm {self.bot.user.name}", 
+            description=f"**Server Prefix:** `{live_prefix}`\n**Get Started:** Run `{live_prefix}help`\n**Support:** [Support Server]({SUPPORT_URL})", 
+            color=0x2B2D31
+        )
+        embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+        embed.set_footer(text="Powered by XENO Development")
+        view = FeatureView(self.bot, live_prefix)
+        await message.reply(embed=embed, view=view, mention_author=False)
+
     @commands.hybrid_command(name="help", description="Show all bot commands")
     async def help_command(self, ctx):
         try:
             live_prefix = await get_prefix(ctx.guild.id) if ctx.guild else "?"
         except:
             live_prefix = "?"
-
         embed = discord.Embed(
             title=f"{self.bot.user.name} Help Panel",
-            description=(
-                f"**Server Prefix:** `{live_prefix}`\n"
-                f"**Total Categories:** `4`\n\n"
-                "**Security & Protection**\n"
-                f"`{live_prefix}antinuke` `{live_prefix}moderation`\n\n"
-                "**Server Management**\n"
-                f"`{live_prefix}utility` `{live_prefix}logging`\n\n"
-                f"Use `{live_prefix}help <command>` for more info"
-            ),
+            description=f"**Server Prefix:** `{live_prefix}`\n\n`{live_prefix}antinuke` `{live_prefix}moderation`\n`{live_prefix}utility` `{live_prefix}logging`\n\nUse `{live_prefix}help <command>`",
             color=0x2B2D31
         )
         embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-        embed.set_footer(text=f"Current Prefix: {live_prefix} | Powered by XENO Development")
-        
+        embed.set_footer(text=f"Current Prefix: {live_prefix} | Powered by XENO")
         view = HelpView(self.bot, live_prefix)
         await ctx.send(embed=embed, view=view)
 
