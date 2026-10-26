@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import ui
 import random, asyncio
 from utils.embeds import base_embed
-from utils.security_checks import everyone  # Sab use kar paye
+from utils.security_checks import everyone
 
 COLOR = 0x2b2d31
 
@@ -26,7 +26,55 @@ class RPSView(ui.View):
     @ui.button(label="Scissors", emoji="✂️", style=discord.ButtonStyle.secondary)
     async def scissor(self, i, b): await self.play(i, "scissors")
 
-class CoinView(ui.View):
+# ===== NEW COINFLIP WITH CHOOSE OPTION =====
+class CoinChooseView(ui.View):
+    def __init__(self, author, user_choice=None):
+        super().__init__(timeout=30)
+        self.author = author
+        self.user_choice = user_choice
+
+    @ui.button(label="Heads", emoji="🌟", style=discord.ButtonStyle.primary)
+    async def heads(self, interaction: discord.Interaction, button: ui.Button):
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message("❌ This is not your game!", ephemeral=True)
+        await self.start_flip(interaction, "Heads")
+
+    @ui.button(label="Tails", emoji="🌙", style=discord.ButtonStyle.secondary)
+    async def tails(self, interaction: discord.Interaction, button: ui.Button):
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message("❌ This is not your game!", ephemeral=True)
+        await self.start_flip(interaction, "Tails")
+
+    async def start_flip(self, interaction, choice):
+        self.user_choice = choice
+        # Animation 1
+        e1 = discord.Embed(title="🪙 Flipping...", description=f"You chose **{choice}**\n\n`[■□□□□]`", color=COLOR)
+        await interaction.response.edit_message(embed=e1, view=None)
+        await asyncio.sleep(0.6)
+        e2 = discord.Embed(title="🪙 In Air...", description=f"You chose **{choice}**\n\n`[■■■□□]`\n*The coin is in the air...*", color=COLOR)
+        await interaction.edit_original_response(embed=e2)
+        await asyncio.sleep(0.8)
+        
+        # Result
+        result = random.choice(["Heads", "Tails"])
+        is_win = result.lower() == choice.lower()
+        
+        if is_win:
+            title = f"🎉 YOU WIN! - {result}"
+            desc = f"**Your Choice:** {choice}\n**Result:** {result}\n\n**{interaction.user.mention} WON! ✅**"
+            color = 0x57F287 # Green
+        else:
+            title = f"💀 YOU LOSE! - {result}"
+            desc = f"**Your Choice:** {choice}\n**Result:** {result}\n\n**{interaction.user.mention} LOST! ❌**"
+            color = 0xED4245 # Red
+
+        e_final = discord.Embed(title=title, description=desc, color=color, timestamp=discord.utils.utcnow())
+        e_final.set_footer(text="Dhadkhan • Coinflip")
+        # Play again view
+        view = CoinChooseView(self.author)
+        await interaction.edit_original_response(embed=e_final, view=view)
+
+class CoinViewSimple(ui.View):
     def __init__(self):
         super().__init__(timeout=30)
     @ui.button(label="Flip Coin", emoji="🪙", style=discord.ButtonStyle.primary)
@@ -41,7 +89,7 @@ class CoinView(ui.View):
         emoji = "🌟" if result == "Heads" else "🌙"
         e_final = discord.Embed(title=f"{emoji} {result}! {emoji}", description=f"**{interaction.user.display_name}** flipped **{result}**!", color=COLOR, timestamp=discord.utils.utcnow())
         e_final.set_footer(text="Dhadkhan • Coinflip")
-        new_view = CoinView()
+        new_view = CoinViewSimple()
         await interaction.edit_original_response(embed=e_final, view=new_view)
 
 class TicTacToeView(ui.View):
@@ -102,11 +150,34 @@ class Fun(commands.Cog):
     async def rps(self, ctx):
         await ctx.send(embed=base_embed("RPS", "Choose your move:"), view=RPSView(ctx.author))
 
-    @commands.hybrid_command(name="coinflip", aliases=["flip"], description="Flip a coin - Everyone")
+    @commands.hybrid_command(name="coinflip", aliases=["flip", "cf"], description="Flip a coin - Choose Heads/Tails and Win/Lose")
     @everyone()
-    async def coinflip(self, ctx):
-        e = base_embed("Coinflip", f"{ctx.author.mention} Click below to flip the coin! 🪙")
-        await ctx.send(embed=e, view=CoinView())
+    async def coinflip(self, ctx, choice: str = None):
+        # Agar direct ?coinflip heads likha to instant result
+        if choice and choice.lower() in ["heads", "head", "h", "tails", "tail", "t"]:
+            user_choice = "Heads" if choice.lower() in ["heads","head","h"] else "Tails"
+            e1 = discord.Embed(title="🪙 Flipping...", description=f"You chose **{user_choice}**\n\n`[■□□□□]`", color=COLOR)
+            msg = await ctx.send(embed=e1)
+            await asyncio.sleep(0.6)
+            e2 = discord.Embed(title="🪙 In Air...", description=f"You chose **{user_choice}**\n\n`[■■■□□]`", color=COLOR)
+            await msg.edit(embed=e2)
+            await asyncio.sleep(0.8)
+            result = random.choice(["Heads", "Tails"])
+            is_win = result.lower() == user_choice.lower()
+            if is_win:
+                e_final = discord.Embed(title=f"🎉 YOU WIN! - {result}", description=f"**Your Choice:** {user_choice}\n**Result:** {result}\n\n**{ctx.author.mention} WON! ✅**", color=0x57F287)
+            else:
+                e_final = discord.Embed(title=f"💀 YOU LOSE! - {result}", description=f"**Your Choice:** {user_choice}\n**Result:** {result}\n\n**{ctx.author.mention} LOST! ❌**", color=0xED4245)
+            e_final.set_footer(text="Dhadkhan • Coinflip")
+            return await msg.edit(embed=e_final, view=CoinChooseView(ctx.author))
+
+        # Normal - Choose wala UI
+        e = discord.Embed(
+            title="🪙 Coinflip - Choose Your Side",
+            description=f"{ctx.author.mention} Choose **Heads** or **Tails** below!\n\n🌟 Heads\n🌙 Tails",
+            color=COLOR
+        )
+        await ctx.send(embed=e, view=CoinChooseView(ctx.author))
 
     @commands.hybrid_command(name="avatar", aliases=["av"], description="Show avatar - Everyone")
     @everyone()
